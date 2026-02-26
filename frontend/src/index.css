@@ -14,7 +14,7 @@
   }
 
   .btn-primary {
-    @apply bg-gray-900 hover:bg-black text-white font-medium px-5 py-2.5 rounded-lg
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg
            transition-colors duration-150 inline-flex items-center justify-center
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
