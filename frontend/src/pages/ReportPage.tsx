@@ -146,7 +146,7 @@ export default function ReportPage() {
         </div>
 
         <button type="submit" className="btn-primary w-full mt-2" disabled={submitting}>
-          {submitting ? 'Sending to AI...' : 'Submit Report'}
+          {submitting ? 'Sending to AI...' : 'Submit'}
         </button>
       </form>
 
