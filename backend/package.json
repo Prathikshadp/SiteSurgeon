@@ -10,8 +10,6 @@
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.20.0",
-    "@e2b/code-interpreter": "^0.0.8",
     "axios": "^1.6.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
@@ -20,14 +18,15 @@
     "express-validator": "^7.0.1",
     "nodemailer": "^6.9.9",
     "octokit": "^3.1.2",
+    "openai": "^4.104.0",
     "uuid": "^9.0.0",
     "winston": "^3.11.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
-    "@types/nodemailer": "^6.4.14",
     "@types/node": "^20.11.5",
+    "@types/nodemailer": "^6.4.14",
     "@types/uuid": "^9.0.7",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.3"
