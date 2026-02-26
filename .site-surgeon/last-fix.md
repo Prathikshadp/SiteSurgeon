@@ -2,7 +2,7 @@
 
 **Issue:** Login crashes on Safari
 **Severity:** medium
-**Date:** 2026-02-26T17:15:43.878Z
+**Date:** 2026-02-26T17:16:38.531Z
 
 ## Description
 Login page throws 500
