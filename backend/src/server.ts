@@ -1,21 +1,32 @@
+import dotenv from 'dotenv';
+dotenv.config(); // Must be first – before any service imports that read process.env
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { issueRouter } from './routes/issueRoutes';
 import { dashboardRouter } from './routes/dashboardRoutes';
 import { logger } from './utils/logger';
 
-dotenv.config();
+// ── Startup env validation ────────────────────────────────────────────────────
+const REQUIRED = [
+  'ANTHROPIC_API_KEY', 'GITHUB_TOKEN', 'GITHUB_OWNER', 'GITHUB_REPO',
+];
+const missing = REQUIRED.filter((k) => !process.env[k]);
+if (missing.length > 0) {
+  logger.warn(`Missing env vars: ${missing.join(', ')}. Some features may degrade gracefully.`);
+}
+if (process.env.DEMO_MODE === 'true') {
+  logger.info('DEMO_MODE=true – sandbox and AI coding agent will be skipped');
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// ── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
+// ── Middleware ─────────────────────────────────────────────────────────────────
+app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '1mb' }));
 
-// Global rate limiter: max 60 requests per minute per IP
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -29,20 +40,14 @@ app.use(limiter);
 app.use('/api/issues', issueRouter);
 app.use('/api/dashboard', dashboardRouter);
 
-// Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), demo: process.env.DEMO_MODE === 'true' });
 });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use(
-  (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    logger.error('Unhandled error', { message: err.message, stack: err.stack });
+  (err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    logger.error('Unhandled error', { message: err.message });
     res.status(500).json({ error: 'Internal server error' });
   }
 );

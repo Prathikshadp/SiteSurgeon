@@ -1,0 +1,15 @@
+{
+  "name": "site",
+  "version": "1.0.0",
+  "description": "A full-stack prototype that **automatically receives bug reports, classifies them with AI, spins up a sandboxed environment, attempts a code fix, and opens a GitHub Pull Request** – all with zero human involvement for simple bugs.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently --kill-others --names \"backend,frontend\" --prefix-colors \"bgBlack.white,bgWhite.black\" \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

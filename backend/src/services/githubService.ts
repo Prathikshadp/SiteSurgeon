@@ -1,259 +1,136 @@
-/**
- * services/githubService.ts
- *
- * Orchestrates all GitHub operations via the Octokit REST API:
- *   1. Get default branch SHA
- *   2. Create a new feature branch
- *   3. Commit changed files
- *   4. Push / update the branch
- *   5. Open a Pull Request
- *   6. (Optional) Auto-merge the PR
- *
- * Keys used: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO, GITHUB_DEFAULT_BRANCH
- *
- * Note: The owner/repo are derived from the issue's repoUrl when possible,
- * falling back to the environment variables.
- */
 import { Octokit } from 'octokit';
 import { Issue, PrResult } from '../utils/types';
 import { logger } from '../utils/logger';
 
-const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
-
-interface FileChange {
-  path: string;
-  content: string; // base64-encoded OR raw UTF-8 (we'll encode)
+// Lazily create Octokit so it reads GITHUB_TOKEN after dotenv.config() runs
+function getOctokit() {
+  return new Octokit({ auth: process.env.GITHUB_TOKEN });
 }
 
-/**
- * Parse owner + repo from a GitHub URL.
- * Falls back to GITHUB_OWNER / GITHUB_REPO env vars.
- */
+interface FileChange { path: string; content: string }
+
 function parseOwnerRepo(repoUrl: string): { owner: string; repo: string } {
   try {
     const match = repoUrl.match(/github\.com[/:]([^/]+)\/([^/.\s]+)/);
-    if (match) {
-      return { owner: match[1], repo: match[2].replace(/\.git$/, '') };
-    }
-  } catch {
-    // fall through
-  }
-  return {
-    owner: process.env.GITHUB_OWNER || '',
-    repo: process.env.GITHUB_REPO || '',
-  };
+    if (match) return { owner: match[1], repo: match[2].replace(/\.git$/, '') };
+  } catch { /* fall through */ }
+  return { owner: process.env.GITHUB_OWNER || '', repo: process.env.GITHUB_REPO || '' };
 }
 
-/**
- * Build a unique branch name for this fix.
- */
 function buildBranchName(issueId: string, title: string): string {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 40);
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
   return `site-surgeon/fix-${slug}-${issueId.slice(0, 8)}`;
 }
 
-/**
- * Get the SHA of the latest commit on the default branch.
- */
-async function getDefaultBranchSha(owner: string, repo: string): Promise<string> {
+async function getDefaultBranchSha(octokit: Octokit, owner: string, repo: string): Promise<string> {
   const branch = process.env.GITHUB_DEFAULT_BRANCH || 'main';
+  logger.info('Getting default branch SHA', { owner, repo, branch });
   const { data } = await octokit.rest.repos.getBranch({ owner, repo, branch });
   return data.commit.sha;
 }
 
-/**
- * Create a new branch from baseSha.
- */
-async function createBranch(
-  owner: string,
-  repo: string,
-  branchName: string,
-  baseSha: string
-): Promise<void> {
-  await octokit.rest.git.createRef({
-    owner,
-    repo,
-    ref: `refs/heads/${branchName}`,
-    sha: baseSha,
-  });
-  logger.info('Branch created', { branchName });
+async function createBranch(octokit: Octokit, owner: string, repo: string, branchName: string, baseSha: string): Promise<void> {
+  logger.info('Creating branch', { branchName });
+  await octokit.rest.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: baseSha });
 }
 
-/**
- * Commit one or more file changes to an existing branch.
- * Uses the low-level Git Data API (blob → tree → commit → update ref).
- */
 async function commitFiles(
-  owner: string,
-  repo: string,
-  branchName: string,
-  parentSha: string,
-  files: FileChange[],
-  commitMessage: string
+  octokit: Octokit, owner: string, repo: string, branchName: string,
+  parentSha: string, files: FileChange[], commitMessage: string
 ): Promise<void> {
-  // 1. Create blobs for each file
+  logger.info('Committing files', { count: files.length, branchName });
+
   const blobs = await Promise.all(
-    files.map((f) =>
-      octokit.rest.git.createBlob({
-        owner,
-        repo,
-        content: Buffer.from(f.content).toString('base64'),
-        encoding: 'base64',
-      })
-    )
+    files.map((f) => octokit.rest.git.createBlob({
+      owner, repo,
+      content: Buffer.from(f.content).toString('base64'),
+      encoding: 'base64',
+    }))
   );
 
-  // 2. Get current tree
-  const { data: baseCommit } = await octokit.rest.git.getCommit({
-    owner,
-    repo,
-    commit_sha: parentSha,
-  });
+  const { data: baseCommit } = await octokit.rest.git.getCommit({ owner, repo, commit_sha: parentSha });
 
-  // 3. Create new tree
   const { data: newTree } = await octokit.rest.git.createTree({
-    owner,
-    repo,
-    base_tree: baseCommit.tree.sha,
+    owner, repo, base_tree: baseCommit.tree.sha,
     tree: files.map((f, i) => ({
-      path: f.path,
-      mode: '100644' as const,
-      type: 'blob' as const,
-      sha: blobs[i].data.sha,
+      path: f.path, mode: '100644' as const, type: 'blob' as const, sha: blobs[i].data.sha,
     })),
   });
 
-  // 4. Create commit
   const { data: newCommit } = await octokit.rest.git.createCommit({
-    owner,
-    repo,
-    message: commitMessage,
-    tree: newTree.sha,
-    parents: [parentSha],
+    owner, repo, message: commitMessage, tree: newTree.sha, parents: [parentSha],
   });
 
-  // 5. Update branch ref
-  await octokit.rest.git.updateRef({
-    owner,
-    repo,
-    ref: `heads/${branchName}`,
-    sha: newCommit.sha,
-    force: false,
-  });
-
-  logger.info('Files committed', { commitSha: newCommit.sha, branchName });
+  await octokit.rest.git.updateRef({ owner, repo, ref: `heads/${branchName}`, sha: newCommit.sha, force: false });
+  logger.info('Files committed', { commitSha: newCommit.sha });
 }
 
-/**
- * Open a Pull Request.
- */
 async function openPullRequest(
-  owner: string,
-  repo: string,
-  branchName: string,
-  issue: Issue,
-  patchSummary: string
+  octokit: Octokit, owner: string, repo: string, branchName: string, issue: Issue, patchSummary: string
 ): Promise<{ prUrl: string; prNumber: number }> {
   const base = process.env.GITHUB_DEFAULT_BRANCH || 'main';
+  logger.info('Creating pull request', { branchName, base });
 
-  const body = `## 🤖 Site Surgeon – Automated Fix
-
-**Issue:** ${issue.title}
-**Severity:** ${issue.severity}
-**Reported at:** ${issue.createdAt}
-
-### Description
-${issue.description}
-
-### Steps to Reproduce
-${issue.stepsToReproduce}
-
-### 📋 Changes Made
-${patchSummary || 'See diff for details.'}
-
----
-*This PR was automatically generated by [Site Surgeon](https://github.com/site-surgeon).*`;
+  const body = [
+    '## 🤖 Site Surgeon – Automated Fix',
+    '',
+    `**Issue:** ${issue.title}`,
+    `**Severity:** ${issue.severity}`,
+    '',
+    '### Description',
+    issue.description,
+    '',
+    '### Changes Made',
+    patchSummary || 'See diff for details.',
+    '',
+    '---',
+    '*Auto-generated by Site Surgeon.*',
+  ].join('\n');
 
   const { data } = await octokit.rest.pulls.create({
-    owner,
-    repo,
+    owner, repo,
     title: `[Site Surgeon] Fix: ${issue.title}`,
-    head: branchName,
-    base,
-    body,
+    head: branchName, base, body,
   });
 
   logger.info('Pull request opened', { prNumber: data.number, prUrl: data.html_url });
   return { prUrl: data.html_url, prNumber: data.number };
 }
 
-/**
- * Merge a pull request (squash merge).
- */
-async function mergePullRequest(
-  owner: string,
-  repo: string,
-  prNumber: number,
-  commitMessage: string
-): Promise<void> {
-  await octokit.rest.pulls.merge({
-    owner,
-    repo,
-    pull_number: prNumber,
-    merge_method: 'squash',
-    commit_title: commitMessage,
-  });
-  logger.info('Pull request merged', { prNumber });
-}
-
-//─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Full pipeline: create branch → commit → open PR [→ merge].
- */
 export async function createAndSubmitFix(
   issue: Issue,
-  filesChanged: Array<{ path: string; content: string }>,
+  filesChanged: FileChange[],
   commitMessage: string,
   patchSummary: string,
   autoMerge: boolean
 ): Promise<PrResult> {
+  const octokit = getOctokit();
   const { owner, repo } = parseOwnerRepo(issue.repoUrl);
 
   if (!owner || !repo) {
-    throw new Error(
-      'Cannot determine GitHub owner/repo. Set GITHUB_OWNER and GITHUB_REPO env vars or use a valid GitHub URL.'
-    );
+    throw new Error('Cannot determine GitHub owner/repo.');
   }
 
   const branchName = buildBranchName(issue.id, issue.title);
 
-  // 1. Get base SHA
-  const baseSha = await getDefaultBranchSha(owner, repo);
+  logger.info('GitHub pipeline starting', { owner, repo, branchName });
 
-  // 2. Create branch
-  await createBranch(owner, repo, branchName, baseSha);
+  const baseSha = await getDefaultBranchSha(octokit, owner, repo);
+  await createBranch(octokit, owner, repo, branchName, baseSha);
+  await commitFiles(octokit, owner, repo, branchName, baseSha, filesChanged, commitMessage);
+  const { prUrl, prNumber } = await openPullRequest(octokit, owner, repo, branchName, issue, patchSummary);
 
-  // 3. Commit files
-  await commitFiles(owner, repo, branchName, baseSha, filesChanged, commitMessage);
-
-  // 4. Open PR
-  const { prUrl, prNumber } = await openPullRequest(
-    owner, repo, branchName, issue, patchSummary
-  );
-
-  // 5. Auto-merge if requested
   let merged = false;
   if (autoMerge) {
     try {
-      await mergePullRequest(owner, repo, prNumber, commitMessage);
+      await octokit.rest.pulls.merge({
+        owner, repo, pull_number: prNumber, merge_method: 'squash',
+        commit_title: commitMessage,
+      });
       merged = true;
+      logger.info('Pull request merged', { prNumber });
     } catch (err) {
-      logger.warn('Auto-merge failed (branch protection / status checks?)', {
+      logger.warn('Auto-merge failed (branch protection / status checks may be required)', {
         error: err instanceof Error ? err.message : String(err),
       });
     }
