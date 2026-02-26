@@ -56,14 +56,22 @@ async function runPipeline(issue: Issue): Promise<void> {
   update(issue.id, { status: 'classifying' });
   logger.info('[1/6] Classifying issue', { issueId: issue.id });
 
-  let classification: ClassificationResult = { decision: 'MANUAL', reason: 'Default', confidence: 0 };
-  try {
-    classification = await classifyIssue(issue);
-  } catch (err) {
-    logger.error('[1/6] Classification error – defaulting to MANUAL', {
-      issueId: issue.id,
-      error: err instanceof Error ? err.message : String(err),
-    });
+  let classification: ClassificationResult;
+
+  if (demoMode) {
+    // In DEMO_MODE skip Claude API – force AUTOMATED so the full PR pipeline always runs
+    logger.info('[1/6] DEMO_MODE – forcing AUTOMATED classification', { issueId: issue.id });
+    classification = { decision: 'AUTOMATED', reason: 'Demo mode: forced AUTOMATED to exercise full pipeline.', confidence: 99 };
+  } else {
+    classification = { decision: 'MANUAL', reason: 'Default', confidence: 0 };
+    try {
+      classification = await classifyIssue(issue);
+    } catch (err) {
+      logger.error('[1/6] Classification error – defaulting to MANUAL', {
+        issueId: issue.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   update(issue.id, { aiDecision: classification.decision, aiReason: classification.reason });
