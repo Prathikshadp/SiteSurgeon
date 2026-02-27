@@ -25,8 +25,8 @@ const reportValidators = [
     .isLength({ max: 5000 }).withMessage('Description must be under 5000 characters'),
 
   body('stepsToReproduce')
+    .optional({ values: 'falsy' })
     .trim()
-    .notEmpty().withMessage('Steps to reproduce are required')
     .isLength({ max: 5000 }),
 
   body('severity')

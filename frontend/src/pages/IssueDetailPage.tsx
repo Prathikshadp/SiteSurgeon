@@ -35,7 +35,7 @@ export default function IssueDetailPage() {
   if (!issue) return null;
 
   const currentStepIndex = STEP_ORDER.indexOf(issue.status as typeof STEP_ORDER[number]);
-  const terminalOk  = issue.status === 'merged' || issue.status === 'notified';
+  const terminalOk = issue.status === 'merged' || issue.status === 'notified';
   const terminalFail = issue.status === 'failed';
 
   return (
@@ -53,9 +53,8 @@ export default function IssueDetailPage() {
           <SeverityBadge severity={issue.severity} />
           <StatusBadge status={issue.status} />
           {issue.aiDecision && (
-            <span className={`badge ${
-              issue.aiDecision === 'AUTOMATED' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'
-            }`}>
+            <span className={`badge ${issue.aiDecision === 'AUTOMATED' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
               {issue.aiDecision === 'AUTOMATED' ? 'Automated' : 'Manual Review'}
             </span>
           )}
@@ -63,29 +62,35 @@ export default function IssueDetailPage() {
       </div>
 
       {/* Progress Stepper */}
-      {!terminalFail && (
-        <div className="card">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-5">Pipeline Progress</h2>
-          <div className="flex items-center overflow-x-auto pb-1">
-            {(['received', 'classifying', 'sandboxing', 'fixing', 'pr_opened', 'merged'] as const).map(
-              (step, idx) => {
+      {!terminalFail && (() => {
+        const isManualPath = issue.aiDecision === 'MANUAL';
+        const steps = isManualPath
+          ? (['received', 'classifying', 'notified'] as const)
+          : (['received', 'classifying', 'sandboxing', 'fixing', 'pr_opened', 'merged'] as const);
+
+        return (
+          <div className="card">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-5">
+              Pipeline Progress {isManualPath && <span className="normal-case text-gray-400 font-normal">— Manual Review Path</span>}
+            </h2>
+            <div className="flex items-center overflow-x-auto pb-1">
+              {steps.map((step, idx) => {
                 const stepIdx = STEP_ORDER.indexOf(step);
-                const done   = currentStepIndex > stepIdx;
-                const active = currentStepIndex === stepIdx;
-                const isLast = idx === 5;
+                const isLast = idx === steps.length - 1;
+                // Mark last step as done (not pulsing) when in a terminal state
+                const done = currentStepIndex > stepIdx || (isLast && terminalOk && currentStepIndex === stepIdx);
+                const active = currentStepIndex === stepIdx && !done;
                 return (
                   <div key={step} className="flex items-center">
                     <div className="flex flex-col items-center min-w-[68px]">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                        done   ? 'bg-gray-900 text-white' :
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${done ? 'bg-gray-900 text-white' :
                         active ? 'bg-gray-900 text-white ring-4 ring-gray-200 animate-pulse' :
-                                 'bg-gray-100 text-gray-400'
-                      }`}>
+                          'bg-gray-100 text-gray-400'
+                        }`}>
                         {done ? '✓' : idx + 1}
                       </div>
-                      <span className={`text-[11px] mt-1.5 capitalize font-medium ${
-                        active ? 'text-gray-900' : done ? 'text-gray-600' : 'text-gray-400'
-                      }`}>
+                      <span className={`text-[11px] mt-1.5 capitalize font-medium ${active ? 'text-gray-900' : done ? 'text-gray-600' : 'text-gray-400'
+                        }`}>
                         {step.replace('_', ' ')}
                       </span>
                     </div>
@@ -94,26 +99,25 @@ export default function IssueDetailPage() {
                     )}
                   </div>
                 );
-              }
-            )}
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Terminal – success */}
       {terminalOk && (
-        <div className={`rounded-xl p-5 border ${
-          issue.status === 'merged'
-            ? 'bg-green-50 border-green-200'
-            : 'bg-orange-50 border-orange-200'
-        }`}>
+        <div className={`rounded-xl p-5 border ${issue.status === 'merged'
+          ? 'bg-green-50 border-green-200'
+          : 'bg-orange-50 border-orange-200'
+          }`}>
           {issue.status === 'merged' ? (
             <>
               <p className="text-green-800 font-semibold text-sm mb-1">Fix merged automatically</p>
               <p className="text-green-700 text-xs">The AI successfully fixed the bug and merged the PR.</p>
               {issue.prUrl && (
                 <a href={issue.prUrl} target="_blank" rel="noopener noreferrer"
-                   className="inline-block mt-3 text-sm text-gray-900 underline font-medium">
+                  className="inline-block mt-3 text-sm text-gray-900 underline font-medium">
                   View merged PR →
                 </a>
               )}
@@ -146,7 +150,7 @@ export default function IssueDetailPage() {
               <span className="text-gray-400 text-xs">Repository</span>
               <p className="mt-0.5">
                 <a href={issue.repoUrl} target="_blank" rel="noopener noreferrer"
-                   className="text-gray-900 hover:underline break-all text-xs font-mono">
+                  className="text-gray-900 hover:underline break-all text-xs font-mono">
                   {issue.repoUrl}
                 </a>
               </p>
@@ -166,7 +170,7 @@ export default function IssueDetailPage() {
                 <span className="text-gray-400 text-xs">Pull Request</span>
                 <p className="mt-0.5">
                   <a href={issue.prUrl} target="_blank" rel="noopener noreferrer"
-                     className="text-gray-900 hover:underline text-xs font-medium">
+                    className="text-gray-900 hover:underline text-xs font-medium">
                     View Pull Request →
                   </a>
                 </p>
