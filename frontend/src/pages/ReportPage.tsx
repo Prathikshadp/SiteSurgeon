@@ -113,7 +113,7 @@ export default function ReportPage() {
           </label>
           <textarea
             rows={3}
-            placeholder="1. Go to /login&#10;2. Click Submit&#10;3. See error"
+            placeholder="1. Go to /login\n2. Click Submit\n3. See error"
             value={form.stepsToReproduce}
             onChange={(e) => set('stepsToReproduce', e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"
@@ -137,7 +137,7 @@ export default function ReportPage() {
             {submitting && (
               <span className="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             )}
-            {submitting ? 'Submitting…' : 'Submit Issue'}
+            {submitting ? 'Submitting…' : 'Submit'}
           </button>
           <span className="text-xs text-gray-400">AI pipeline starts immediately</span>
         </div>
