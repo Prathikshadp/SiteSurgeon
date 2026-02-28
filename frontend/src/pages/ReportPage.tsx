@@ -11,7 +11,6 @@ export default function ReportPage() {
     description: '',
     stepsToReproduce: '',
     severity: 'low' as Severity,
-    repoUrl: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,38 +56,22 @@ export default function ReportPage() {
           />
         </div>
 
-        {/* Severity + Repo side-by-side */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Severity <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={form.severity}
-              onChange={(e) => set('severity', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white"
-            >
-              {SEVERITIES.map((s) => (
-                <option key={s} value={s}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Repository URL <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="url"
-              required
-              placeholder="https://github.com/user/repo"
-              value={form.repoUrl}
-              onChange={(e) => set('repoUrl', e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
-            />
-          </div>
+        {/* Severity */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Severity <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={form.severity}
+            onChange={(e) => set('severity', e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white"
+          >
+            {SEVERITIES.map((s) => (
+              <option key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Description */}

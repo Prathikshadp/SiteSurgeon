@@ -1,21 +1,21 @@
 /**
  * services/aiService.ts
  *
- * Groq-powered AI service for Site Surgeon.
- * Uses the OpenAI-compatible Groq API (free tier).
+ * AI service for Site Surgeon.
+ * Uses any OpenAI-compatible API endpoint.
  *
- * Key used: GROQ_API_KEY
- * Model:    llama-3.3-70b-versatile
+ * Key used: AI_API_KEY
+ * Model:    AI_MODEL (configurable)
  */
 import OpenAI from 'openai';
 import { logger } from '../utils/logger';
 
-const MODEL = 'llama-3.3-70b-versatile';
+const MODEL = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
 
 function getClient(): OpenAI {
   return new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: 'https://api.groq.com/openai/v1',
+    apiKey: process.env.AI_API_KEY,
+    baseURL: process.env.AI_BASE_URL || 'https://api.groq.com/openai/v1',
   });
 }
 
@@ -62,7 +62,7 @@ export async function classifyIssue(issueText: string): Promise<'AUTOMATED' | 'M
 
   const raw = (response.choices[0]?.message?.content ?? '').trim().toUpperCase();
   const decision: 'AUTOMATED' | 'MANUAL' = raw.startsWith('AUTOMATED') ? 'AUTOMATED' : 'MANUAL';
-  logger.info('Groq classification', { decision, raw });
+  logger.info('AI classification', { decision, raw });
   return decision;
 }
 
@@ -71,7 +71,7 @@ export async function classifyIssue(issueText: string): Promise<'AUTOMATED' | 'M
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Ask Groq to identify which files (up to 5) are most relevant to the bug.
+ * Ask the AI to identify which files (up to 5) are most relevant to the bug.
  */
 export async function identifyRelevantFiles(
   issueText: string,
@@ -209,7 +209,7 @@ export async function generateFix(
 
   const jsonStr = extractOutermostJSON(cleaned) || extractOutermostJSON(raw);
   if (!jsonStr) {
-    throw new Error('Groq returned no JSON object in fix response:\n' + raw.slice(0, 300));
+    throw new Error('AI returned no JSON object in fix response:\n' + raw.slice(0, 300));
   }
 
   try {
@@ -225,7 +225,7 @@ export async function generateFix(
       });
       return JSON.parse(sanitized) as FixResult;
     } catch {
-      throw new Error('Groq returned invalid JSON for fix response:\n' + raw.slice(0, 500));
+      throw new Error('AI returned invalid JSON for fix response:\n' + raw.slice(0, 500));
     }
   }
 }

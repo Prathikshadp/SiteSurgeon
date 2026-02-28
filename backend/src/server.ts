@@ -10,7 +10,7 @@ import { logger } from './utils/logger';
 
 // ── Startup env validation ────────────────────────────────────────────────────
 const REQUIRED = [
-  'GROQ_API_KEY', 'E2B_API_KEY', 'GITHUB_TOKEN', 'GITHUB_OWNER', 'GITHUB_REPO',
+  'AI_API_KEY', 'E2B_API_KEY', 'GITHUB_TOKEN', 'GITHUB_OWNER', 'GITHUB_REPO',
 ];
 const missing = REQUIRED.filter((k) => !process.env[k]);
 if (missing.length > 0) {

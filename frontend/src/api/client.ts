@@ -64,7 +64,6 @@ export interface ReportPayload {
   description: string;
   stepsToReproduce: string;
   severity: Severity;
-  repoUrl: string;
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────

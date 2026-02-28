@@ -1,16 +1,16 @@
 /**
  * agents/codingAgent.ts
  *
- * AI Coding Agent powered by Groq (llama-3.3-70b-versatile).
+ * AI Coding Agent for automated bug fixing.
  * ReAct-style pipeline:
  *   1. List repo files
- *   2. Ask Groq which files are relevant
+ *   2. Ask AI which files are relevant
  *   3. Read those files from the local sandbox
- *   4. Ask Groq to produce fixed file versions
+ *   4. Ask AI to produce fixed file versions
  *   5. Write fixed files back to the sandbox
  *   6. Return AgentResult
  *
- * Key used: GROQ_API_KEY (via aiService.ts)
+ * Key used: AI_API_KEY (via aiService.ts)
  */
 import { Issue, AgentResult } from '../utils/types';
 import { SandboxContext, listRepoFiles, readFile, writeFile } from '../sandbox/sandboxManager';
@@ -34,7 +34,7 @@ export async function runCodingAgent(
     logger.info('Agent listed repo files', { count: allFiles.length });
 
     // Step 2 – ask Groq which files are relevant
-    agentLogs.push('Step 2: Identifying relevant files with Groq...');
+    agentLogs.push('Step 2: Identifying relevant files with AI...');
     const issueText = [
       `Title: ${issue.title}`,
       `Severity: ${issue.severity}`,
@@ -64,7 +64,7 @@ export async function runCodingAgent(
     }
 
     // Step 4 – generate fix with Groq
-    agentLogs.push('Step 4: Generating fix with Groq (llama-3.3-70b-versatile)...');
+    agentLogs.push(`Step 4: Generating fix with AI (${process.env.AI_MODEL || 'default'})...`);
     const fixResponse = await generateFix(issueText, fileContents);
     agentLogs.push(`Fix generated. Files to change: ${fixResponse.files.length}`);
     agentLogs.push(`Commit: ${fixResponse.commitMessage}`);

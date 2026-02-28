@@ -19,13 +19,18 @@ function appendLogs(issueId: string, newLogs: string[]) {
 // ── Public entry point ────────────────────────────────────────────────────────
 
 export async function processIssue(body: ReportIssueBody): Promise<Issue> {
+  const repoUrl = body.repoUrl
+    || (process.env.GITHUB_OWNER && process.env.GITHUB_REPO
+      ? `https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}`
+      : '');
+
   const issue: Issue = {
     id: uuidv4(),
     title: body.title,
     description: body.description,
     stepsToReproduce: body.stepsToReproduce,
     severity: body.severity,
-    repoUrl: body.repoUrl,
+    repoUrl,
     status: 'received',
     sandboxLogs: [],
     createdAt: new Date().toISOString(),
@@ -168,7 +173,7 @@ async function runPipeline(issue: Issue): Promise<void> {
         } else {
           logger.warn('[4/6] Agent produced no fix – escalating to MANUAL', { issueId: issue.id, error: agentResult.error });
           update(issue.id, { aiDecision: 'MANUAL', aiReason: `Agent failed: ${agentResult.error}` });
-          try { await sendManualReviewEmail({ ...issue, aiDecision: 'MANUAL', aiReason: agentResult.error }); } catch {}
+          try { await sendManualReviewEmail({ ...issue, aiDecision: 'MANUAL', aiReason: agentResult.error }); } catch { }
           update(issue.id, { status: 'notified' });
           return;
         }
@@ -184,7 +189,7 @@ async function runPipeline(issue: Issue): Promise<void> {
       });
       appendLogs(issue.id, [`[error] Sandbox failed: ${sandboxErr instanceof Error ? sandboxErr.message : String(sandboxErr)}`]);
       update(issue.id, { aiDecision: 'MANUAL', aiReason: 'Sandbox unavailable. Escalated for manual review.' });
-      try { await sendManualReviewEmail({ ...issue, aiDecision: 'MANUAL', aiReason: 'Sandbox failed.' }); } catch {}
+      try { await sendManualReviewEmail({ ...issue, aiDecision: 'MANUAL', aiReason: 'Sandbox failed.' }); } catch { }
       update(issue.id, { status: 'notified' });
       return;
     }

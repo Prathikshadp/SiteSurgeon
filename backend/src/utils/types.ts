@@ -42,7 +42,7 @@ export interface ReportIssueBody {
   description: string;
   stepsToReproduce: string;
   severity: Severity;
-  repoUrl: string;
+  repoUrl?: string;
 }
 
 // ── AI classifier result ──────────────────────────────────────────────────────

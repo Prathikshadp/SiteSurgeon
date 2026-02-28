@@ -35,8 +35,8 @@ const reportValidators = [
     .isIn(SEVERITY_VALUES).withMessage(`Severity must be one of: ${SEVERITY_VALUES.join(', ')}`),
 
   body('repoUrl')
+    .optional({ values: 'falsy' })
     .trim()
-    .notEmpty().withMessage('Repository URL is required')
     .matches(GITHUB_URL_REGEX).withMessage('Must be a valid GitHub repository URL'),
 ];
 

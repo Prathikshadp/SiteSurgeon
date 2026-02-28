@@ -4,14 +4,15 @@
  * Thin wrapper around aiService.ts that maps a full Issue object
  * to the ClassificationResult type used throughout the pipeline.
  *
- * Key used: GROQ_API_KEY (via aiService.ts)
+ * Key used: AI_API_KEY (via aiService.ts)
  */
 import { Issue, ClassificationResult } from '../utils/types';
-import { classifyIssue as groqClassify } from './aiService';
+import { classifyIssue as aiClassify } from './aiService';
 import { logger } from '../utils/logger';
 
 export async function classifyIssue(issue: Issue): Promise<ClassificationResult> {
-  logger.info('Classifying issue with Groq', { issueId: issue.id });
+  const model = process.env.AI_MODEL || 'llama-3.3-70b-versatile';
+  logger.info('Classifying issue with AI', { issueId: issue.id, model });
 
   const issueText = [
     `Title: ${issue.title}`,
@@ -21,15 +22,15 @@ export async function classifyIssue(issue: Issue): Promise<ClassificationResult>
   ].join('\n');
 
   try {
-    const decision = await groqClassify(issueText);
+    const decision = await aiClassify(issueText);
     return {
       decision,
-      reason: `Groq (llama-3.3-70b-versatile) classified this as ${decision}.`,
+      reason: `AI (${model}) classified this as ${decision}.`,
       confidence: 85,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    logger.warn('Groq classification failed – defaulting to AUTOMATED', {
+    logger.warn('AI classification failed – defaulting to AUTOMATED', {
       issueId: issue.id,
       error: msg,
     });
