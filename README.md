@@ -353,6 +353,12 @@ Use a Gmail **App Password** (not your login password). Enable 2FA first, then g
 
 ---
 
+## How to contribute
+
+Please follow the code of conduct.
+
+---
+
 ## License
 
 MIT
