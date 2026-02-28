@@ -120,8 +120,8 @@ export async function installDependencies(ctx: SandboxContext): Promise<void> {
   }
 }
 
-export async function readFile(_ctx: SandboxContext, absolutePath: string): Promise<string> {
-  const result = await _ctx.sandbox.files.read(absolutePath);
+export async function readFile(ctx: SandboxContext, absolutePath: string): Promise<string> {
+  const result = await ctx.sandbox.files.read(absolutePath);
   return result as string;
 }
 
