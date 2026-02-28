@@ -183,16 +183,49 @@ export async function generateFix(
 
   const raw = (response.choices[0]?.message?.content ?? '').trim();
 
-  // Try to extract the JSON object from the response (Groq sometimes wraps in prose/markdown)
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  // Robust JSON extraction: use bracket-counting to find the outermost JSON object
+  function extractOutermostJSON(text: string): string | null {
+    const start = text.indexOf('{');
+    if (start === -1) return null;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) return text.substring(start, i + 1); }
+    }
+    return null;
+  }
+
+  // Strip markdown code fences if present
+  let cleaned = raw;
+  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) cleaned = fenceMatch[1].trim();
+
+  const jsonStr = extractOutermostJSON(cleaned) || extractOutermostJSON(raw);
+  if (!jsonStr) {
     throw new Error('Groq returned no JSON object in fix response:\n' + raw.slice(0, 300));
   }
-  const cleaned = jsonMatch[0];
 
   try {
-    return JSON.parse(cleaned) as FixResult;
-  } catch {
-    throw new Error('Groq returned invalid JSON for fix response:\n' + raw.slice(0, 500));
+    return JSON.parse(jsonStr) as FixResult;
+  } catch (parseErr) {
+    // Attempt to fix common JSON issues (control chars inside strings)
+    try {
+      const sanitized = jsonStr.replace(/[\x00-\x1F\x7F]/g, (ch) => {
+        if (ch === '\n') return '\\n';
+        if (ch === '\r') return '\\r';
+        if (ch === '\t') return '\\t';
+        return '';
+      });
+      return JSON.parse(sanitized) as FixResult;
+    } catch {
+      throw new Error('Groq returned invalid JSON for fix response:\n' + raw.slice(0, 500));
+    }
   }
 }

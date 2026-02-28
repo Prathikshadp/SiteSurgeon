@@ -65,8 +65,9 @@ export async function createSandbox(repoUrl: string): Promise<SandboxContext> {
   const apiKey = process.env.E2B_API_KEY;
   if (!apiKey) throw new Error('E2B_API_KEY is not set in environment');
 
-  logger.info('Creating E2B sandbox...');
-  const sandbox = await Sandbox.create({ apiKey, timeoutMs: 600_000 });
+  const template = process.env.E2B_AGENT_TEMPLATE || 'plasma-agent-sandbox';
+  logger.info('Creating E2B sandbox...', { template });
+  const sandbox = await Sandbox.create(template, { apiKey, timeoutMs: 600_000 });
 
   const sandboxId = sandbox.sandboxId;
   const workDir = '/home/user';
@@ -97,11 +98,11 @@ export async function installDependencies(ctx: SandboxContext): Promise<void> {
   const files = checkResult.stdout ?? '';
 
   let cmd: string | null = null;
-  if      (files.includes('package-lock.json')) cmd = 'npm install --legacy-peer-deps';
-  else if (files.includes('yarn.lock'))          cmd = 'yarn install --non-interactive';
-  else if (files.includes('pnpm-lock.yaml'))     cmd = 'pnpm install --frozen-lockfile';
-  else if (files.includes('requirements.txt'))   cmd = 'pip install -r requirements.txt';
-  else if (files.includes('pyproject.toml'))     cmd = 'pip install .';
+  if (files.includes('package-lock.json')) cmd = 'npm install --legacy-peer-deps';
+  else if (files.includes('yarn.lock')) cmd = 'yarn install --non-interactive';
+  else if (files.includes('pnpm-lock.yaml')) cmd = 'pnpm install --frozen-lockfile';
+  else if (files.includes('requirements.txt')) cmd = 'pip install -r requirements.txt';
+  else if (files.includes('pyproject.toml')) cmd = 'pip install .';
 
   if (!cmd) {
     ctx.logs.push('[install] No package manager detected – skipping.');
@@ -187,7 +188,7 @@ export async function runTestsOrBuild(
   } catch { /* ignore */ }
 
   let cmd: string | null = null;
-  if      (scripts['test'])  cmd = 'npm test -- --passWithNoTests';
+  if (scripts['test']) cmd = 'npm test -- --passWithNoTests';
   else if (scripts['build']) cmd = 'npm run build';
 
   if (!cmd) {
