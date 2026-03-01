@@ -2,15 +2,15 @@
  * sandbox/sandboxManager.ts
  *
  * Cloud sandbox powered by E2B (https://e2b.dev).
- * Each issue gets an isolated Linux container — git, node, npm pre-installed.
+ * Each issue gets an isolated Linux container with the AI agent pre-installed.
  *
  * Flow:
- *   createSandbox()        → spin up E2B container
+ *   createSandbox()        → spin up E2B container (with AI credentials injected)
  *   cloneRepo()            → git clone --depth 1 <repoUrl>
  *   installDependencies()  → npm / yarn / pnpm / pip install
+ *   runAgentInSandbox()    → run AI agent CLI directly inside the repo
  *   readFile / writeFile   → sbx.files.read / write
  *   listRepoFiles()        → `find` inside the container
- *   runTestsOrBuild()      → npm test or npm run build
  *   destroySandbox()       → sbx.kill()
  */
 import { Sandbox } from 'e2b';
@@ -34,7 +34,13 @@ function repoName(repoUrl: string): string {
 }
 
 function toCloneUrl(repoUrl: string): string {
-  return repoUrl.replace(/\/$/, '').replace(/\.git$/, '') + '.git';
+  const base = repoUrl.replace(/\/$/, '').replace(/\.git$/, '') + '.git';
+  // Inject GITHUB_TOKEN for authenticated cloning inside the sandbox
+  const token = process.env.GITHUB_TOKEN;
+  if (token && base.includes('github.com')) {
+    return base.replace('https://', `https://${token}@`);
+  }
+  return base;
 }
 
 /** Run a shell command inside the E2B container; throw on non-zero exit. */
@@ -66,6 +72,7 @@ export async function createSandbox(repoUrl: string): Promise<SandboxContext> {
   if (!apiKey) throw new Error('E2B_API_KEY is not set in environment');
 
   const template = process.env.E2B_AGENT_TEMPLATE || 'plasma-agent-sandbox';
+
   logger.info('Creating E2B sandbox...', { template });
   const sandbox = await Sandbox.create(template, { apiKey, timeoutMs: 600_000 });
 
@@ -78,6 +85,74 @@ export async function createSandbox(repoUrl: string): Promise<SandboxContext> {
   logs.push(`E2B sandbox created: ${sandboxId}`);
 
   return { sandboxId, sandbox, workDir, repoDir, logs };
+}
+
+/**
+ * Run the AI agent inside the E2B sandbox in the cloned repo directory.
+ * Credentials are passed as shell-inline env vars so the agent can authenticate.
+ * Returns the list of files the agent changed, detected via `git status`.
+ */
+export async function runAgentInSandbox(
+  ctx: SandboxContext,
+  task: string,
+): Promise<{ filesChanged: string[]; logs: string[] }> {
+  const logs: string[] = [];
+
+  // Build shell-inline env prefix (same technique as the template's server.js)
+  const apiKey = (process.env.AI_API_KEY || '').replace(/'/g, "'\\''");
+  const baseUrl = (process.env.AI_BASE_URL || 'https://api.anthropic.com').replace(/'/g, "'\\''");
+  const model = (process.env.AI_MODEL || '').replace(/'/g, "'\\''");
+
+  const envPrefix = [
+    `ANTHROPIC_API_KEY='${apiKey}'`,
+    `ANTHROPIC_BASE_URL='${baseUrl}'`,
+    model ? `ANTHROPIC_MODEL='${model}'` : '',
+  ].filter(Boolean).join(' ');
+
+  // Escape the task string (same as plasma-pro/server.js)
+  const escapedTask = task
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, '\\$')
+    .replace(/`/g, '\\`');
+
+  const agentCmd = `${envPrefix} claude -p "${escapedTask}" --dangerously-skip-permissions`;
+
+  logs.push('[agent] Starting AI agent inside sandbox...');
+  logger.info('Running AI agent in sandbox', { repoDir: ctx.repoDir });
+
+  const result = await ctx.sandbox.commands.run(
+    `cd "${ctx.repoDir}" && ${agentCmd}`,
+    { timeoutMs: 300_000 },
+  );
+
+  // Capture agent output (last 3000 chars to avoid log flooding)
+  const stdout = (result.stdout ?? '').trim();
+  const stderr = (result.stderr ?? '').trim();
+  if (stdout) logs.push(`[agent] ${stdout.slice(-3000)}`);
+  if (stderr) logs.push(`[agent stderr] ${stderr.slice(-500)}`);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`AI agent exited with code ${result.exitCode}: ${stderr.slice(0, 300)}`);
+  }
+
+  // Detect changed files via git
+  const diffResult = await ctx.sandbox.commands.run(
+    `cd "${ctx.repoDir}" && git status --porcelain`,
+  );
+
+  const filesChanged = (diffResult.stdout ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    // Strip the 2-char status prefix (e.g. "M ", "A ", "?? ") and trailing quotes
+    .map((line) => line.replace(/^[A-Z?]{1,2}\s+/, '').replace(/^"|"$/g, '').trim())
+    .filter(Boolean);
+
+  logs.push(`[agent] Files changed: ${filesChanged.join(', ') || 'none'}`);
+  logger.info('AI agent completed', { filesChanged });
+
+  return { filesChanged, logs };
 }
 
 export async function cloneRepo(ctx: SandboxContext, repoUrl: string): Promise<void> {

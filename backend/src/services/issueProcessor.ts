@@ -195,8 +195,23 @@ async function runPipeline(issue: Issue): Promise<void> {
     }
   }
 
+  // Guard: if no files ended up in the list, escalate rather than creating an empty PR
+  if (filesForGithub.length === 0) {
+    logger.warn('[5/6] No files to commit – escalating to MANUAL', { issueId: issue.id });
+    update(issue.id, { aiDecision: 'MANUAL', aiReason: 'No file changes to commit.' });
+    try { await sendManualReviewEmail({ ...issue, aiDecision: 'MANUAL', aiReason: 'No file changes to commit.' }); } catch { }
+    update(issue.id, { status: 'notified' });
+    return;
+  }
+
+  // Sanitize file paths – strip leading slashes for GitHub's tree API
+  filesForGithub = filesForGithub.map((f) => ({
+    ...f,
+    path: f.path.replace(/^\.[\\/]/, '').replace(/^[\\/]+/, ''),
+  }));
+
   // ── Step 5: GitHub operations ───────────────────────────────────────────────
-  logger.info('[5/6] Creating branch and PR', { issueId: issue.id });
+  logger.info('[5/6] Creating branch and PR', { issueId: issue.id, fileCount: filesForGithub.length });
 
   let prResult;
   try {

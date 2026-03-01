@@ -31,17 +31,40 @@ async function getDefaultBranchSha(octokit: Octokit, owner: string, repo: string
 
 async function createBranch(octokit: Octokit, owner: string, repo: string, branchName: string, baseSha: string): Promise<void> {
   logger.info('Creating branch', { branchName });
-  await octokit.rest.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: baseSha });
+  try {
+    await octokit.rest.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: baseSha });
+  } catch (err: any) {
+    // If the branch already exists (422), delete it and retry
+    if (err?.status === 422) {
+      logger.warn('Branch already exists – deleting and recreating', { branchName });
+      try {
+        await octokit.rest.git.deleteRef({ owner, repo, ref: `heads/${branchName}` });
+      } catch { /* ignore delete errors */ }
+      await octokit.rest.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: baseSha });
+    } else {
+      throw err;
+    }
+  }
 }
 
 async function commitFiles(
   octokit: Octokit, owner: string, repo: string, branchName: string,
   parentSha: string, files: FileChange[], commitMessage: string
 ): Promise<void> {
-  logger.info('Committing files', { count: files.length, branchName });
+  if (files.length === 0) {
+    throw new Error('No files to commit – cannot create an empty tree.');
+  }
+
+  // GitHub's createTree requires relative paths without leading slashes
+  const sanitizedFiles = files.map((f) => ({
+    ...f,
+    path: f.path.replace(/^\.[\/\\]/, '').replace(/^[\/\\]+/, ''),
+  }));
+
+  logger.info('Committing files', { count: sanitizedFiles.length, branchName, paths: sanitizedFiles.map(f => f.path) });
 
   const blobs = await Promise.all(
-    files.map((f) => octokit.rest.git.createBlob({
+    sanitizedFiles.map((f) => octokit.rest.git.createBlob({
       owner, repo,
       content: Buffer.from(f.content).toString('base64'),
       encoding: 'base64',
@@ -52,7 +75,7 @@ async function commitFiles(
 
   const { data: newTree } = await octokit.rest.git.createTree({
     owner, repo, base_tree: baseCommit.tree.sha,
-    tree: files.map((f, i) => ({
+    tree: sanitizedFiles.map((f, i) => ({
       path: f.path, mode: '100644' as const, type: 'blob' as const, sha: blobs[i].data.sha,
     })),
   });
