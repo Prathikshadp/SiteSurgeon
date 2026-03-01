@@ -195,8 +195,8 @@ export async function installDependencies(ctx: SandboxContext): Promise<void> {
   }
 }
 
-export async function readFile(_ctx: SandboxContext, absolutePath: string): Promise<string> {
-  const result = await _ctx.sandbox.files.read(absolutePath);
+export async function readFile(ctx: SandboxContext, absolutePath: string): Promise<string> {
+  const result = await ctx.sandbox.files.read(absolutePath);
   return result as string;
 }
 
@@ -225,8 +225,11 @@ export async function writeFile(
 ): Promise<void> {
   const fullPath = `${ctx.repoDir}/${relativePath}`;
   // Ensure parent dir exists
-  const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
-  await ctx.sandbox.commands.run(`mkdir -p "${dir}"`);
+  const lastSlash = fullPath.lastIndexOf('/');
+  if (lastSlash > 0) {
+    const dir = fullPath.substring(0, lastSlash);
+    await ctx.sandbox.commands.run(`mkdir -p "${dir}"`);
+  }
   await ctx.sandbox.files.write(fullPath, content);
   ctx.logs.push(`[write] ${relativePath}`);
 }
